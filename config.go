@@ -8,11 +8,13 @@ import (
 var (
 	confPath    = "./rendezvous.json"
 	databaseUrl = ""
+	httpAddr    = ":8080"
 )
 
 func loadConfig() error {
 	cfg := struct {
 		Dburl string `json:"database"`
+		Http  string `json:"http"`
 	}{}
 
 	f, err := os.Open(confPath)
@@ -26,5 +28,6 @@ func loadConfig() error {
 	}
 
 	databaseUrl = cfg.Dburl
+	httpAddr = cfg.Http
 	return nil
 }

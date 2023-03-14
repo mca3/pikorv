@@ -14,7 +14,9 @@ var db *pgxpool.Pool
 
 const pqConfigSchema = `
 CREATE TABLE IF NOT EXISTS config(
-	version INTEGER NOT NULL DEFAULT 0
+	id SMALLINT PRIMARY KEY,
+	version INTEGER NOT NULL DEFAULT 0,
+	CHECK(id = 1)
 );
 `
 
@@ -24,7 +26,8 @@ CREATE TABLE users(
 	username VARCHAR(32) NOT NULL UNIQUE,
 	email VARCHAR(256) NOT NULL UNIQUE,
 	name VARCHAR(64),
-	password VARCHAR(256) NOT NULL
+	password bytea,
+	salt bytea
 );
 
 CREATE TABLE networks(
@@ -75,11 +78,18 @@ type Device struct {
 }
 
 // connect connects to PostgreSQL and updates the schema if it is needed.
-func connect() error {
+func connect(test ...bool) error {
 	var err error
 	db, err = pgxpool.Connect(context.Background(), databaseUrl)
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %v", err)
+	}
+
+	if test != nil {
+		_, err := db.Exec(context.Background(), "SET search_path TO pg_temp")
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	if err := upgrade(); err != nil {
@@ -135,7 +145,7 @@ func upgrade() error {
 	}
 
 	// Set the new schema version.
-	if _, err := tx.Exec(context.Background(), "UPDATE config SET version = $1", ver); err != nil {
+	if _, err := tx.Exec(context.Background(), "INSERT INTO config(id, version) VALUES(1,$1) ON CONFLICT(id) DO UPDATE SET version = $1", ver); err != nil {
 		return fmt.Errorf("failed to set version: %v", err)
 	}
 
@@ -146,7 +156,7 @@ func upgrade() error {
 func Users(ctx context.Context) ([]User, error) {
 	var us []User
 
-	rows, err := db.Query(ctx, "SELECT id, username FROM users")
+	rows, err := db.Query(ctx, "SELECT id, username, email, name FROM users")
 	if err != nil {
 		return us, err
 	}
@@ -154,7 +164,7 @@ func Users(ctx context.Context) ([]User, error) {
 
 	for rows.Next() {
 		u := User{}
-		if err := rows.Scan(&u.id, &u.username); err != nil {
+		if err := rows.Scan(&u.id, &u.username, &u.email, &u.name); err != nil {
 			return us, err
 		}
 		us = append(us, u)
@@ -188,7 +198,7 @@ func Username(ctx context.Context, user string) (User, error) {
 			email,
 			name
 		FROM users
-		WHERE id = $1
+		WHERE username = $1
 	`, user).Scan(&u.id, &u.email, &u.name)
 	return u, err
 }
@@ -200,7 +210,7 @@ func (n *User) Save(ctx context.Context) error {
 	var err error
 	if n.id == 0 {
 		err = db.QueryRow(ctx, `
-			INSERT INTO users (Username, email, name) VALUES ($1, $2, $3)
+			INSERT INTO users (username, email, name) VALUES ($1, $2, $3)
 			RETURNING id
 		`, n.username, n.email, nullString(n.name)).Scan(&n.id)
 	} else {
@@ -245,7 +255,7 @@ func CheckPassword(ctx context.Context, user, pass string) int64 {
 // Delete deletes the user from the database, along with all of their networks
 // and devices.
 func (n *User) Delete(ctx context.Context) error {
-	_, err := db.Query(ctx, "DELETE FROM users WHERE id = $1", n.id)
+	_, err := db.Exec(ctx, "DELETE FROM users WHERE id = $1", n.id)
 	return err
 }
 
@@ -291,12 +301,14 @@ func NetworkDevices(ctx context.Context, nwid int64) ([]Device, error) {
 
 	rows, err := db.Query(ctx, `
 		SELECT
-			id,
-			owner,
-			name,
-			pubkey,
-			ip
-		FROM (SELECT device FROM nwdevs WHERE network = $1)
+			devices.id,
+			devices.owner,
+			devices.name,
+			devices.pubkey,
+			devices.ip
+		FROM nwdevs
+		INNER JOIN devices ON devices.id = nwdevs.device
+		WHERE network = $1
 	`, nwid)
 	if err != nil {
 		return ns, err
@@ -322,7 +334,7 @@ func (n *Network) Add(ctx context.Context, devid int64) error {
 
 // Remove removes a device from the network.
 func (n *Network) Remove(ctx context.Context, devid int64) error {
-	_, err := db.Exec(ctx, `DELETE FROM nwdevs VALUES($1, $2)`, n.id, devid)
+	_, err := db.Exec(ctx, `DELETE FROM nwdevs WHERE network = $1 AND device = $2`, n.id, devid)
 	return err
 }
 
@@ -330,9 +342,10 @@ func (n *Network) Remove(ctx context.Context, devid int64) error {
 func (n *Network) Save(ctx context.Context) error {
 	var err error
 	if n.id == 0 {
-		_, err = db.Exec(ctx, `
+		err = db.QueryRow(ctx, `
 			INSERT INTO networks (owner, name) VALUES ($1, $2)
-		`, n.owner, n.name)
+			RETURNING id
+		`, n.owner, n.name).Scan(&n.id)
 	} else {
 		_, err = db.Exec(ctx, `
 			UPDATE networks SET
@@ -346,7 +359,7 @@ func (n *Network) Save(ctx context.Context) error {
 
 // Delete deletes the network.
 func (n *Network) Delete(ctx context.Context) error {
-	_, err := db.Query(ctx, "DELETE FROM networks WHERE id = $1", n.id)
+	_, err := db.Exec(ctx, "DELETE FROM networks WHERE id = $1", n.id)
 	return err
 }
 
@@ -403,24 +416,28 @@ func (n *Device) Save(ctx context.Context) error {
 
 	var err error
 	if n.id == 0 {
-		_, err = db.Exec(ctx, `
+		err = db.QueryRow(ctx, `
 			INSERT INTO devices(
 				owner, name, pubkey, ip
 			) VALUES ($1, $2, $3, $4)
-		`, n.owner, nullString(n.name), n.pubkey, n.ip)
+			RETURNING id
+		`, n.owner, nullString(n.name), n.pubkey, n.ip).Scan(&n.id)
 	} else {
 		_, err = db.Exec(ctx, `
-			UPDATE networks SET
-				name = $2
+			UPDATE devices
+			SET
+				name = $2,
+				pubkey = $3,
+				ip = $4
 			WHERE
 				id = $1
-		`, n.id, n.name)
+		`, n.id, nullString(n.name), n.pubkey, n.ip)
 	}
 	return err
 }
 
 // Delete deletes the device from the database.
 func (n *Device) Delete(ctx context.Context) error {
-	_, err := db.Query(ctx, "DELETE FROM devices WHERE id = $1", n.id)
+	_, err := db.Exec(ctx, "DELETE FROM devices WHERE id = $1", n.id)
 	return err
 }
