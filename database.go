@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
@@ -70,11 +71,11 @@ type Network struct {
 }
 
 type Device struct {
-	id     int64
-	owner  int64
-	name   string
-	pubkey string
-	ip     string
+	ID        int64  `json:"id"`
+	Owner     int64  `json:"owner"`
+	Name      string `json:"name,omitempty"`
+	PublicKey string `json:"key"`
+	IP        string `json:"ip"`
 }
 
 // connect connects to PostgreSQL and updates the schema if it is needed.
@@ -177,6 +178,8 @@ func Users(ctx context.Context) ([]User, error) {
 func UserID(ctx context.Context, user int64) (User, error) {
 	u := User{id: user}
 
+	var ns sql.NullString
+
 	err := db.QueryRow(ctx, `
 		SELECT
 			username,
@@ -184,13 +187,16 @@ func UserID(ctx context.Context, user int64) (User, error) {
 			name
 		FROM users
 		WHERE id = $1
-	`, user).Scan(&u.username, &u.email, &u.name)
+	`, user).Scan(&u.username, &u.email, &ns)
+	u.name = ns.String
 	return u, err
 }
 
 // Username returns a user from their username.
 func Username(ctx context.Context, user string) (User, error) {
 	u := User{username: user}
+
+	var ns sql.NullString
 
 	err := db.QueryRow(ctx, `
 		SELECT
@@ -199,7 +205,8 @@ func Username(ctx context.Context, user string) (User, error) {
 			name
 		FROM users
 		WHERE username = $1
-	`, user).Scan(&u.id, &u.email, &u.name)
+	`, user).Scan(&u.id, &u.email, &ns)
+	u.name = ns.String
 	return u, err
 }
 
@@ -317,7 +324,7 @@ func NetworkDevices(ctx context.Context, nwid int64) ([]Device, error) {
 
 	for rows.Next() {
 		n := Device{}
-		if err := rows.Scan(&n.id, &n.owner, &n.name, &n.pubkey, &n.ip); err != nil {
+		if err := rows.Scan(&n.ID, &n.Owner, &n.Name, &n.PublicKey, &n.IP); err != nil {
 			return ns, err
 		}
 		ns = append(ns, n)
@@ -382,8 +389,8 @@ func Devices(ctx context.Context, user int64) ([]Device, error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		n := Device{owner: user}
-		if err := rows.Scan(&n.id, &n.name, &n.pubkey, &n.ip); err != nil {
+		n := Device{Owner: user}
+		if err := rows.Scan(&n.ID, &n.Name, &n.PublicKey, &n.IP); err != nil {
 			return ns, err
 		}
 		ns = append(ns, n)
@@ -394,7 +401,7 @@ func Devices(ctx context.Context, user int64) ([]Device, error) {
 
 // DeviceID returns a device from its ID.
 func DeviceID(ctx context.Context, devid int64) (Device, error) {
-	d := Device{id: devid}
+	d := Device{ID: devid}
 
 	err := db.QueryRow(ctx, `
 		SELECT
@@ -404,24 +411,24 @@ func DeviceID(ctx context.Context, devid int64) (Device, error) {
 			ip
 		FROM devices
 		WHERE id = $1
-	`, devid).Scan(&d.owner, &d.name, &d.pubkey, &d.ip)
+	`, devid).Scan(&d.Owner, &d.Name, &d.PublicKey, &d.IP)
 	return d, err
 }
 
 // Save updates existing device information or creates a new device.
 func (n *Device) Save(ctx context.Context) error {
-	if n.ip == "" {
+	if n.IP == "" {
 		panic("ip is nil")
 	}
 
 	var err error
-	if n.id == 0 {
+	if n.ID == 0 {
 		err = db.QueryRow(ctx, `
 			INSERT INTO devices(
 				owner, name, pubkey, ip
 			) VALUES ($1, $2, $3, $4)
 			RETURNING id
-		`, n.owner, nullString(n.name), n.pubkey, n.ip).Scan(&n.id)
+		`, n.Owner, nullString(n.Name), n.PublicKey, n.IP).Scan(&n.ID)
 	} else {
 		_, err = db.Exec(ctx, `
 			UPDATE devices
@@ -431,13 +438,13 @@ func (n *Device) Save(ctx context.Context) error {
 				ip = $4
 			WHERE
 				id = $1
-		`, n.id, nullString(n.name), n.pubkey, n.ip)
+		`, n.ID, nullString(n.Name), n.PublicKey, n.IP)
 	}
 	return err
 }
 
 // Delete deletes the device from the database.
 func (n *Device) Delete(ctx context.Context) error {
-	_, err := db.Exec(ctx, "DELETE FROM devices WHERE id = $1", n.id)
+	_, err := db.Exec(ctx, "DELETE FROM devices WHERE id = $1", n.ID)
 	return err
 }

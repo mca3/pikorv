@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 
 	"github.com/mca3/mwr"
 )
@@ -25,8 +26,30 @@ func startHttp() {
 		Handler: srvh,
 	}
 
+	srvh.Use(func(c *mwr.Ctx) error {
+		defer func() {
+			if v := recover(); v != nil {
+				log.Println(v)
+				log.Println(string(debug.Stack()))
+			}
+		}()
+
+		return c.Next()
+	})
+
+	// New routes
 	srvh.Post("/api/new/user", apiNewUser)
+	srvh.Post("/api/new/device", apiNewDevice)
+
+	// User stuff
+	srvh.Get("/api/list/devices", apiListDevices)
+
+	// Delete routes
 	srvh.Post("/api/del/user", apiDeleteUser)
+	srvh.Post("/api/del/device", apiDeleteDevice)
+
+	// Auth stuff
+	srvh.Get("/api/auth", apiAuth)
 	srvh.Post("/api/auth", apiAuth)
 
 	log.Fatal(srv.ListenAndServe())

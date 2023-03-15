@@ -53,10 +53,10 @@ func makeNetwork(t *testing.T, u User) Network {
 
 func makeDevice(t *testing.T, u User) Device {
 	n := Device{
-		owner:  u.id,
-		name:   "my test device",
-		pubkey: "dummy value goes here",
-		ip:     "2001:db8::1",
+		Owner:     u.id,
+		Name:      "my test device",
+		PublicKey: "dummy value goes here",
+		IP:        "2001:db8::1",
 	}
 
 	if err := n.Save(context.Background()); err != nil {
@@ -230,7 +230,7 @@ func TestNewDevice(t *testing.T) {
 	u := makeUser(t)
 	dev := makeDevice(t, u)
 
-	ndev, err := DeviceID(context.Background(), dev.id)
+	ndev, err := DeviceID(context.Background(), dev.ID)
 	if err != nil {
 		t.Fatalf("failed fetching network: %v", err)
 		return
@@ -258,13 +258,13 @@ func TestUpdateDevice(t *testing.T) {
 
 	u := makeUser(t)
 	dev := makeDevice(t, u)
-	dev.name = "new device name"
+	dev.Name = "new device name"
 
 	if err := dev.Save(context.Background()); err != nil {
 		t.Fatalf("failed updating device: %v", err)
 	}
 
-	ndev, err := DeviceID(context.Background(), dev.id)
+	ndev, err := DeviceID(context.Background(), dev.ID)
 	if err != nil {
 		t.Fatalf("failed fetching network: %v", err)
 	}
@@ -285,7 +285,7 @@ func TestDelDevice(t *testing.T) {
 		return
 	}
 
-	_, err := DeviceID(context.Background(), dev.id)
+	_, err := DeviceID(context.Background(), dev.ID)
 	if !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("delete failed, network still exists: %v", err)
 		return
@@ -299,7 +299,7 @@ func TestAddDevice(t *testing.T) {
 	nw := makeNetwork(t, u)
 	dev := makeDevice(t, u)
 
-	if err := nw.Add(context.Background(), dev.id); err != nil {
+	if err := nw.Add(context.Background(), dev.ID); err != nil {
 		t.Fatalf("failed to add device to network: %v", err)
 	}
 
@@ -324,11 +324,11 @@ func TestRemoveDevice(t *testing.T) {
 	nw := makeNetwork(t, u)
 	dev := makeDevice(t, u)
 
-	if err := nw.Add(context.Background(), dev.id); err != nil {
+	if err := nw.Add(context.Background(), dev.ID); err != nil {
 		t.Fatalf("failed to add device to network: %v", err)
 	}
 
-	if err := nw.Remove(context.Background(), dev.id); err != nil {
+	if err := nw.Remove(context.Background(), dev.ID); err != nil {
 		t.Fatalf("failed to delete device from network: %v", err)
 	}
 
