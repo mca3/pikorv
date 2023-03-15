@@ -108,5 +108,7 @@ func DeleteNetwork(c *mwr.Ctx) error {
 		return api500(c, err)
 	}
 
+	// TODO: Notify network devices
+
 	return c.SendStatus(204)
 }

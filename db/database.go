@@ -335,6 +335,36 @@ func NetworkDevices(ctx context.Context, nwid int64) ([]Device, error) {
 	return ns, err
 }
 
+// DeviceNetworks returns all networks that this device is supposed to be
+// connected to.
+func DeviceNetworks(ctx context.Context, devid int64) ([]Network, error) {
+	var ns []Network
+
+	rows, err := db.Query(ctx, `
+		SELECT
+			networks.id,
+			networks.owner,
+			networks.name
+		FROM nwdevs
+		INNER JOIN networks ON networks.id = nwdevs.network
+		WHERE device = $1
+	`, devid)
+	if err != nil {
+		return ns, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		n := Network{}
+		if err := rows.Scan(&n.ID, &n.Owner, &n.Name); err != nil {
+			return ns, err
+		}
+		ns = append(ns, n)
+	}
+
+	return ns, err
+}
+
 // Add adds a device to the network.
 func (n *Network) Add(ctx context.Context, devid int64) error {
 	_, err := db.Exec(ctx, `INSERT INTO nwdevs(Network, device) VALUES($1, $2)`, n.ID, devid)
