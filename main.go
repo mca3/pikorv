@@ -37,7 +37,11 @@ func startHttp() {
 			}
 		}()
 
-		return c.Next()
+		err := c.Next()
+		if err != nil {
+			log.Printf("%s ERROR %v", c.Path(), err)
+		}
+		return err
 	})
 
 	// New routes

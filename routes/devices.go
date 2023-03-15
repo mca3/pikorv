@@ -3,6 +3,8 @@ package routes
 // This package holds all API routes.
 
 import (
+	"net/netip"
+
 	"github.com/mca3/mwr"
 	"github.com/mca3/pikorv/db"
 )
@@ -116,7 +118,6 @@ func DeleteDevice(c *mwr.Ctx) error {
 }
 
 // DevicePing updates the device's IP.
-// TODO: Not implemented.
 //
 // Path: /api/device/ping
 // Method: POST
@@ -130,11 +131,12 @@ func DevicePing(c *mwr.Ctx) error {
 
 	data := struct {
 		Device int64
+		Port   uint16
 	}{}
 
 	if err := c.BodyParser(&data); err != nil {
 		return api400(c, err)
-	} else if data.Device == 0 {
+	} else if data.Device == 0 || data.Port == 0 {
 		return api400(c)
 	}
 
@@ -147,7 +149,17 @@ func DevicePing(c *mwr.Ctx) error {
 		return api404(c)
 	}
 
-	// TODO: Functionality goes here
+	addr, err := netip.ParseAddr(c.IP())
+	if err != nil {
+		// what?
+		panic(err)
+	}
+
+	dev.Endpoint = netip.AddrPortFrom(addr, data.Port).String()
+	if err := dev.Save(c.Context()); err != nil {
+		return api500(c, err)
+	}
+
 	// TODO: Notify others on network
 
 	return c.SendStatus(204)

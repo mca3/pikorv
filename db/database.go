@@ -42,7 +42,8 @@ CREATE TABLE devices(
 	owner INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 	name VARCHAR(64) NOT NULL UNIQUE,
 	pubkey VARCHAR(64) NOT NULL UNIQUE,
-	ip VARCHAR(39) NOT NULL UNIQUE
+	ip VARCHAR(39) NOT NULL UNIQUE,
+	endpoint VARCHAR(64)
 );
 
 CREATE TABLE nwdevs(
@@ -55,8 +56,10 @@ CREATE TABLE nwdevs(
 
 var pqMigrations = []string{
 	"", // schema init
+	"ALTER TABLE devices ADD COLUMN endpoint VARCHAR(64)",
 }
 
+// User represents a rendezvous user.
 type User struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`
@@ -64,18 +67,32 @@ type User struct {
 	Name     string `json:"name,omitempty"`
 }
 
+// Network represents a network to which devices connect to
 type Network struct {
 	ID    int64  `json:"id"`
 	Owner int64  `json:"owner"`
 	Name  string `json:"name"`
 }
 
+// Device represnets a device, its unique Pikonet IP, and its public key.
 type Device struct {
-	ID        int64  `json:"id"`
-	Owner     int64  `json:"owner"`
-	Name      string `json:"name,omitempty"`
+	ID    int64  `json:"id"`
+	Owner int64  `json:"owner"`
+	Name  string `json:"name"`
+
+	// PublicKey is the WireGuard public key for this device.
 	PublicKey string `json:"key"`
-	IP        string `json:"ip"`
+
+	// IP is the Pikonet IP, which likely means a random IP in the range
+	// fd00::/32.
+	// This IP is not routable by the Internet, and only by Pikonet nodes.
+	IP string `json:"ip"`
+
+	// Endpoint is the endpoint of this device, which is updated whenever
+	// the endpoint pings us.
+	//
+	// TODO: Store a date with this, dump it if it's too old.
+	Endpoint string `json:"endpoint,omitempty"`
 }
 
 // Connect connects to PostgreSQL and updates the schema if it is needed.
@@ -146,7 +163,7 @@ func upgrade() error {
 	}
 
 	// Set the new schema version.
-	if _, err := tx.Exec(context.Background(), "INSERT INTO config(id, version) VALUES(1,$1) ON CONFLICT(id) DO UPDATE SET version = $1", ver); err != nil {
+	if _, err := tx.Exec(context.Background(), "INSERT INTO config(id, version) VALUES(1,$1) ON CONFLICT(id) DO UPDATE SET version = $1", len(pqMigrations)); err != nil {
 		return fmt.Errorf("failed to set version: %v", err)
 	}
 
@@ -314,7 +331,8 @@ func NetworkDevices(ctx context.Context, nwid int64) ([]Device, error) {
 			devices.owner,
 			devices.name,
 			devices.pubkey,
-			devices.ip
+			devices.ip,
+			devices.endpoint
 		FROM nwdevs
 		INNER JOIN devices ON devices.id = nwdevs.device
 		WHERE network = $1
@@ -326,9 +344,11 @@ func NetworkDevices(ctx context.Context, nwid int64) ([]Device, error) {
 
 	for rows.Next() {
 		n := Device{}
-		if err := rows.Scan(&n.ID, &n.Owner, &n.Name, &n.PublicKey, &n.IP); err != nil {
+		var ens sql.NullString
+		if err := rows.Scan(&n.ID, &n.Owner, &n.Name, &n.PublicKey, &n.IP, &ens); err != nil {
 			return ns, err
 		}
+		n.Endpoint = ens.String
 		ns = append(ns, n)
 	}
 
@@ -411,7 +431,8 @@ func Devices(ctx context.Context, user int64) ([]Device, error) {
 			id,
 			name,
 			pubkey,
-			ip
+			ip,
+			endpoint
 		FROM devices
 		WHERE owner = $1
 	`, user)
@@ -422,9 +443,11 @@ func Devices(ctx context.Context, user int64) ([]Device, error) {
 
 	for rows.Next() {
 		n := Device{Owner: user}
-		if err := rows.Scan(&n.ID, &n.Name, &n.PublicKey, &n.IP); err != nil {
+		var ens sql.NullString
+		if err := rows.Scan(&n.ID, &n.Name, &n.PublicKey, &n.IP, &ens); err != nil {
 			return ns, err
 		}
+		n.Endpoint = ens.String
 		ns = append(ns, n)
 	}
 
@@ -434,16 +457,19 @@ func Devices(ctx context.Context, user int64) ([]Device, error) {
 // DeviceID returns a device from its ID.
 func DeviceID(ctx context.Context, devid int64) (Device, error) {
 	d := Device{ID: devid}
+	var ens sql.NullString
 
 	err := db.QueryRow(ctx, `
 		SELECT
 			owner,
 			name,
 			pubkey,
-			ip
+			ip,
+			endpoint
 		FROM devices
 		WHERE id = $1
-	`, devid).Scan(&d.Owner, &d.Name, &d.PublicKey, &d.IP)
+	`, devid).Scan(&d.Owner, &d.Name, &d.PublicKey, &d.IP, &ens)
+	d.Endpoint = ens.String
 	return d, err
 }
 
@@ -457,20 +483,21 @@ func (n *Device) Save(ctx context.Context) error {
 	if n.ID == 0 {
 		err = db.QueryRow(ctx, `
 			INSERT INTO devices(
-				owner, name, pubkey, ip
-			) VALUES ($1, $2, $3, $4)
+				owner, name, pubkey, ip, endpoint
+			) VALUES ($1, $2, $3, $4, $5)
 			RETURNING id
-		`, n.Owner, nullString(n.Name), n.PublicKey, n.IP).Scan(&n.ID)
+		`, n.Owner, nullString(n.Name), n.PublicKey, n.IP, nullString(n.Endpoint)).Scan(&n.ID)
 	} else {
 		_, err = db.Exec(ctx, `
 			UPDATE devices
 			SET
 				name = $2,
 				pubkey = $3,
-				ip = $4
+				ip = $4,
+				endpoint = $5
 			WHERE
 				id = $1
-		`, n.ID, nullString(n.Name), n.PublicKey, n.IP)
+		`, n.ID, nullString(n.Name), n.PublicKey, n.IP, nullString(n.Endpoint))
 	}
 	return err
 }
