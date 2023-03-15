@@ -1,8 +1,10 @@
-package main
+package routes
 
 import (
 	"crypto/rand"
 	"net"
+
+	"github.com/mca3/pikorv/config"
 )
 
 func getBit(b []byte, i int) bool {
@@ -34,10 +36,10 @@ func setBit(b []byte, i int, val bool) {
 
 func applySubnet(ip net.IP) {
 	// Hacky bit manipulation follows
-	_, bits := subnetIp.Mask.Size()
+	_, bits := config.SubnetIp.Mask.Size()
 
 	for i := 0; i < bits; i++ {
-		setBit(ip, i, getBit(subnetIp.IP, i))
+		setBit(ip, i, getBit(config.SubnetIp.IP, i))
 	}
 }
 

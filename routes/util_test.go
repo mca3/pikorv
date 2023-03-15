@@ -1,13 +1,16 @@
-package main
+package routes
 
 import (
 	"net"
 	"testing"
+
+	"github.com/mca3/pikorv/config"
 )
 
 func TestApplySubnet(t *testing.T) {
 	// 2001:db8::/32
-	subnetIp = &net.IPNet{
+	// TODO: Maybe we shouldn't do this?
+	config.SubnetIp = &net.IPNet{
 		IP:   net.IP{0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		Mask: net.IPMask{0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	}

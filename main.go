@@ -10,6 +10,9 @@ import (
 	"runtime/debug"
 
 	"github.com/mca3/mwr"
+	"github.com/mca3/pikorv/db"
+	"github.com/mca3/pikorv/routes"
+	"github.com/mca3/pikorv/config"
 )
 
 var (
@@ -22,7 +25,7 @@ var srvh *mwr.Handler
 func startHttp() {
 	srvh = &mwr.Handler{}
 	srv = &http.Server{
-		Addr:    httpAddr,
+		Addr:    config.HttpAddr,
 		Handler: srvh,
 	}
 
@@ -38,19 +41,19 @@ func startHttp() {
 	})
 
 	// New routes
-	srvh.Post("/api/new/user", apiNewUser)
-	srvh.Post("/api/new/device", apiNewDevice)
+	srvh.Post("/api/new/user", routes.NewUser)
+	srvh.Post("/api/new/device", routes.NewDevice)
 
 	// User stuff
-	srvh.Get("/api/list/devices", apiListDevices)
+	srvh.Get("/api/list/devices", routes.ListDevices)
 
 	// Delete routes
-	srvh.Post("/api/del/user", apiDeleteUser)
-	srvh.Post("/api/del/device", apiDeleteDevice)
+	srvh.Post("/api/del/user", routes.DeleteUser)
+	srvh.Post("/api/del/device", routes.DeleteDevice)
 
 	// Auth stuff
-	srvh.Get("/api/auth", apiAuth)
-	srvh.Post("/api/auth", apiAuth)
+	srvh.Get("/api/auth", routes.Auth)
+	srvh.Post("/api/auth", routes.Auth)
 
 	log.Fatal(srv.ListenAndServe())
 }
@@ -62,17 +65,17 @@ func stopHttp() {
 func main() {
 	flag.Parse()
 
-	confPath = *cfgPath
+	config.ConfPath = *cfgPath
 
-	if err := loadConfig(); err != nil {
+	if err := config.Load(); err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	if err := connect(); err != nil {
+	if err := db.Connect(config.DatabaseUrl); err != nil {
 		log.Fatalf("failed to connect to the database: %v", err)
 	}
 
-	defer disconnect()
+	defer db.Disconnect()
 
 	startHttp()
 	defer stopHttp()

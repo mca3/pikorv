@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"encoding/json"
@@ -7,21 +7,21 @@ import (
 )
 
 var (
-	confPath    = "./rendezvous.json"
-	databaseUrl = ""
-	httpAddr    = ":8080"
-	subnet      = "fd00::/32"
-	subnetIp    *net.IPNet
+	ConfPath    = "./rendezvous.json"
+	DatabaseUrl = ""
+	HttpAddr    = ":8080"
+	Subnet      = "fd00::/32"
+	SubnetIp    *net.IPNet
 )
 
-func loadConfig() error {
+func Load() error {
 	cfg := struct {
 		Dburl  string `json:"database"`
 		Http   string `json:"http"`
 		Subnet string `json:"subnet"`
 	}{}
 
-	f, err := os.Open(confPath)
+	f, err := os.Open(ConfPath)
 	if err != nil {
 		return err
 	}
@@ -32,15 +32,15 @@ func loadConfig() error {
 	}
 
 	if cfg.Dburl != "" {
-		databaseUrl = cfg.Dburl
+		DatabaseUrl = cfg.Dburl
 	}
 	if cfg.Http != "" {
-		httpAddr = cfg.Http
+		HttpAddr = cfg.Http
 	}
 	if cfg.Subnet != "" {
-		subnet = cfg.Subnet
+		Subnet = cfg.Subnet
 	}
 
-	_, subnetIp, err = net.ParseCIDR(subnet)
+	_, SubnetIp, err = net.ParseCIDR(Subnet)
 	return err
 }

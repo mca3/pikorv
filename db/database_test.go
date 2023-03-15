@@ -1,4 +1,4 @@
-package main
+package db
 
 import (
 	"context"
@@ -16,18 +16,17 @@ func openDb(t *testing.T) {
 		t.Skip("Set POSTGRES_TEST to run database tests")
 	}
 
-	databaseUrl = u
-	if err := connect(true); err != nil {
+	if err := Connect(u, true); err != nil {
 		panic(err)
 	}
 
-	t.Cleanup(disconnect)
+	t.Cleanup(Disconnect)
 }
 
 func makeUser(t *testing.T) User {
 	u := User{
-		username: "test",
-		email:    "test@example.com",
+		Username: "test",
+		Email:    "test@example.com",
 		name:     "Test User",
 	}
 
@@ -40,7 +39,7 @@ func makeUser(t *testing.T) User {
 
 func makeNetwork(t *testing.T, u User) Network {
 	n := Network{
-		owner: u.id,
+		owner: u.ID,
 		name:  "test network",
 	}
 
@@ -53,7 +52,7 @@ func makeNetwork(t *testing.T, u User) Network {
 
 func makeDevice(t *testing.T, u User) Device {
 	n := Device{
-		Owner:     u.id,
+		Owner:     u.ID,
 		Name:      "my test device",
 		PublicKey: "dummy value goes here",
 		IP:        "2001:db8::1",
@@ -71,7 +70,7 @@ func TestNewUser(t *testing.T) {
 
 	u := makeUser(t)
 
-	nu, err := Username(context.Background(), u.username)
+	nu, err := Username(context.Background(), u.Username)
 	if err != nil {
 		t.Fatalf("failed fetching user: %v", err)
 		return
@@ -81,7 +80,7 @@ func TestNewUser(t *testing.T) {
 		t.Fatalf("expected %v, got %v", u, nu)
 	}
 
-	nu, err = UserID(context.Background(), u.id)
+	nu, err = UserID(context.Background(), u.ID)
 	if err != nil {
 		t.Fatalf("failed fetching user: %v", err)
 		return
@@ -111,7 +110,7 @@ func TestUpdateUser(t *testing.T) {
 		t.Fatalf("failed to update user: %v", err)
 	}
 
-	nu, err := UserID(context.Background(), u.id)
+	nu, err := UserID(context.Background(), u.ID)
 	if err != nil {
 		t.Fatalf("failed fetching user: %v", err)
 		return
@@ -132,7 +131,7 @@ func TestDelUser(t *testing.T) {
 		return
 	}
 
-	_, err := Username(context.Background(), u.username)
+	_, err := Username(context.Background(), u.Username)
 	if !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("delete failed, user still exists: %v", err)
 		return
@@ -148,11 +147,11 @@ func TestUserPassword(t *testing.T) {
 		return
 	}
 
-	if CheckPassword(context.Background(), u.username, "hunter2") == -1 {
+	if CheckPassword(context.Background(), u.Username, "hunter2") == -1 {
 		t.Fatal("invalid username or password")
 	}
 
-	if CheckPassword(context.Background(), u.username, "hunter1") != -1 {
+	if CheckPassword(context.Background(), u.Username, "hunter1") != -1 {
 		t.Fatal("invalid password passed")
 	}
 }
@@ -173,7 +172,7 @@ func TestNewNetwork(t *testing.T) {
 		t.Fatalf("expected %v, got %v", nw, nnw)
 	}
 
-	ns, err := Networks(context.Background(), u.id)
+	ns, err := Networks(context.Background(), u.ID)
 	if err != nil {
 		t.Fatalf("failed fetching users: %v", err)
 		return
@@ -240,7 +239,7 @@ func TestNewDevice(t *testing.T) {
 		t.Fatalf("expected %v, got %v", dev, ndev)
 	}
 
-	devs, err := Devices(context.Background(), u.id)
+	devs, err := Devices(context.Background(), u.ID)
 	if err != nil {
 		t.Fatalf("failed fetching devices: %v", err)
 		return

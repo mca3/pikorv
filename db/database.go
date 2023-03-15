@@ -1,4 +1,4 @@
-package main
+package db
 
 import (
 	"bytes"
@@ -58,9 +58,9 @@ var pqMigrations = []string{
 }
 
 type User struct {
-	id       int64
-	username string
-	email    string
+	ID       int64
+	Username string
+	Email    string
 	name     string
 }
 
@@ -78,10 +78,10 @@ type Device struct {
 	IP        string `json:"ip"`
 }
 
-// connect connects to PostgreSQL and updates the schema if it is needed.
-func connect(test ...bool) error {
+// Connect connects to PostgreSQL and updates the schema if it is needed.
+func Connect(url string, test ...bool) error {
 	var err error
-	db, err = pgxpool.Connect(context.Background(), databaseUrl)
+	db, err = pgxpool.Connect(context.Background(), url)
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %v", err)
 	}
@@ -101,7 +101,7 @@ func connect(test ...bool) error {
 	return nil
 }
 
-func disconnect() {
+func Disconnect() {
 	db.Close()
 }
 
@@ -165,7 +165,7 @@ func Users(ctx context.Context) ([]User, error) {
 
 	for rows.Next() {
 		u := User{}
-		if err := rows.Scan(&u.id, &u.username, &u.email, &u.name); err != nil {
+		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.name); err != nil {
 			return us, err
 		}
 		us = append(us, u)
@@ -176,7 +176,7 @@ func Users(ctx context.Context) ([]User, error) {
 
 // UserID returns a user from their ID.
 func UserID(ctx context.Context, user int64) (User, error) {
-	u := User{id: user}
+	u := User{ID: user}
 
 	var ns sql.NullString
 
@@ -187,14 +187,14 @@ func UserID(ctx context.Context, user int64) (User, error) {
 			name
 		FROM users
 		WHERE id = $1
-	`, user).Scan(&u.username, &u.email, &ns)
+	`, user).Scan(&u.Username, &u.Email, &ns)
 	u.name = ns.String
 	return u, err
 }
 
 // Username returns a user from their username.
 func Username(ctx context.Context, user string) (User, error) {
-	u := User{username: user}
+	u := User{Username: user}
 
 	var ns sql.NullString
 
@@ -205,7 +205,7 @@ func Username(ctx context.Context, user string) (User, error) {
 			name
 		FROM users
 		WHERE username = $1
-	`, user).Scan(&u.id, &u.email, &ns)
+	`, user).Scan(&u.ID, &u.Email, &ns)
 	u.name = ns.String
 	return u, err
 }
@@ -215,11 +215,11 @@ func Username(ctx context.Context, user string) (User, error) {
 // If the user's ID is zero, a new user will be created.
 func (n *User) Save(ctx context.Context) error {
 	var err error
-	if n.id == 0 {
+	if n.ID == 0 {
 		err = db.QueryRow(ctx, `
 			INSERT INTO users (username, email, name) VALUES ($1, $2, $3)
 			RETURNING id
-		`, n.username, n.email, nullString(n.name)).Scan(&n.id)
+		`, n.Username, n.Email, nullString(n.name)).Scan(&n.ID)
 	} else {
 		_, err = db.Exec(ctx, `
 			UPDATE users SET
@@ -227,7 +227,7 @@ func (n *User) Save(ctx context.Context) error {
 				name = $3
 			WHERE
 				id = $1
-		`, n.id, n.email, nullString(n.name))
+		`, n.ID, n.Email, nullString(n.name))
 	}
 	return err
 }
@@ -237,7 +237,7 @@ func (n *User) SetPassword(ctx context.Context, pass string) error {
 	salt := makeSalt()
 	ct := hashPassword(pass, salt)
 
-	_, err := db.Exec(ctx, "UPDATE users SET password = $1, salt = $2 WHERE id = $3", ct, salt, n.id)
+	_, err := db.Exec(ctx, "UPDATE users SET password = $1, salt = $2 WHERE id = $3", ct, salt, n.ID)
 	return err
 }
 
@@ -262,7 +262,7 @@ func CheckPassword(ctx context.Context, user, pass string) int64 {
 // Delete deletes the user from the database, along with all of their networks
 // and devices.
 func (n *User) Delete(ctx context.Context) error {
-	_, err := db.Exec(ctx, "DELETE FROM users WHERE id = $1", n.id)
+	_, err := db.Exec(ctx, "DELETE FROM users WHERE id = $1", n.ID)
 	return err
 }
 
