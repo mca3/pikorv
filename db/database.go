@@ -58,16 +58,16 @@ var pqMigrations = []string{
 }
 
 type User struct {
-	ID       int64
-	Username string
-	Email    string
-	name     string
+	ID       int64  `json:"id"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Name     string `json:"name,omitempty"`
 }
 
 type Network struct {
-	id    int64
-	owner int64
-	name  string
+	ID    int64  `json:"id"`
+	Owner int64  `json:"owner"`
+	Name  string `json:"name"`
 }
 
 type Device struct {
@@ -165,9 +165,11 @@ func Users(ctx context.Context) ([]User, error) {
 
 	for rows.Next() {
 		u := User{}
-		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.name); err != nil {
+		var ns sql.NullString
+		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &ns); err != nil {
 			return us, err
 		}
+		u.Name = ns.String
 		us = append(us, u)
 	}
 
@@ -188,7 +190,7 @@ func UserID(ctx context.Context, user int64) (User, error) {
 		FROM users
 		WHERE id = $1
 	`, user).Scan(&u.Username, &u.Email, &ns)
-	u.name = ns.String
+	u.Name = ns.String
 	return u, err
 }
 
@@ -206,7 +208,7 @@ func Username(ctx context.Context, user string) (User, error) {
 		FROM users
 		WHERE username = $1
 	`, user).Scan(&u.ID, &u.Email, &ns)
-	u.name = ns.String
+	u.Name = ns.String
 	return u, err
 }
 
@@ -219,7 +221,7 @@ func (n *User) Save(ctx context.Context) error {
 		err = db.QueryRow(ctx, `
 			INSERT INTO users (username, email, name) VALUES ($1, $2, $3)
 			RETURNING id
-		`, n.Username, n.Email, nullString(n.name)).Scan(&n.ID)
+		`, n.Username, n.Email, nullString(n.Name)).Scan(&n.ID)
 	} else {
 		_, err = db.Exec(ctx, `
 			UPDATE users SET
@@ -227,7 +229,7 @@ func (n *User) Save(ctx context.Context) error {
 				name = $3
 			WHERE
 				id = $1
-		`, n.ID, n.Email, nullString(n.name))
+		`, n.ID, n.Email, nullString(n.Name))
 	}
 	return err
 }
@@ -277,8 +279,8 @@ func Networks(ctx context.Context, user int64) ([]Network, error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		n := Network{owner: user}
-		if err := rows.Scan(&n.id, &n.name); err != nil {
+		n := Network{Owner: user}
+		if err := rows.Scan(&n.ID, &n.Name); err != nil {
 			return ns, err
 		}
 		ns = append(ns, n)
@@ -289,7 +291,7 @@ func Networks(ctx context.Context, user int64) ([]Network, error) {
 
 // NetworkID returns a network from its ID.
 func NetworkID(ctx context.Context, nwid int64) (Network, error) {
-	n := Network{id: nwid}
+	n := Network{ID: nwid}
 
 	err := db.QueryRow(ctx, `
 		SELECT
@@ -297,7 +299,7 @@ func NetworkID(ctx context.Context, nwid int64) (Network, error) {
 			name
 		FROM networks
 		WHERE id = $1
-	`, nwid).Scan(&n.owner, &n.name)
+	`, nwid).Scan(&n.Owner, &n.Name)
 	return n, err
 }
 
@@ -335,38 +337,38 @@ func NetworkDevices(ctx context.Context, nwid int64) ([]Device, error) {
 
 // Add adds a device to the network.
 func (n *Network) Add(ctx context.Context, devid int64) error {
-	_, err := db.Exec(ctx, `INSERT INTO nwdevs(Network, device) VALUES($1, $2)`, n.id, devid)
+	_, err := db.Exec(ctx, `INSERT INTO nwdevs(Network, device) VALUES($1, $2)`, n.ID, devid)
 	return err
 }
 
 // Remove removes a device from the network.
 func (n *Network) Remove(ctx context.Context, devid int64) error {
-	_, err := db.Exec(ctx, `DELETE FROM nwdevs WHERE network = $1 AND device = $2`, n.id, devid)
+	_, err := db.Exec(ctx, `DELETE FROM nwdevs WHERE network = $1 AND device = $2`, n.ID, devid)
 	return err
 }
 
 // Save updates existing network information or creates a new network.
 func (n *Network) Save(ctx context.Context) error {
 	var err error
-	if n.id == 0 {
+	if n.ID == 0 {
 		err = db.QueryRow(ctx, `
 			INSERT INTO networks (owner, name) VALUES ($1, $2)
 			RETURNING id
-		`, n.owner, n.name).Scan(&n.id)
+		`, n.Owner, n.Name).Scan(&n.ID)
 	} else {
 		_, err = db.Exec(ctx, `
 			UPDATE networks SET
 				name = $2
 			WHERE
 				id = $1
-		`, n.id, n.name)
+		`, n.ID, n.Name)
 	}
 	return err
 }
 
 // Delete deletes the network.
 func (n *Network) Delete(ctx context.Context) error {
-	_, err := db.Exec(ctx, "DELETE FROM networks WHERE id = $1", n.id)
+	_, err := db.Exec(ctx, "DELETE FROM networks WHERE id = $1", n.ID)
 	return err
 }
 

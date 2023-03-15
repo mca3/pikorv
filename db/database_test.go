@@ -27,7 +27,7 @@ func makeUser(t *testing.T) User {
 	u := User{
 		Username: "test",
 		Email:    "test@example.com",
-		name:     "Test User",
+		Name:     "Test User",
 	}
 
 	if err := u.Save(context.Background()); err != nil {
@@ -39,8 +39,8 @@ func makeUser(t *testing.T) User {
 
 func makeNetwork(t *testing.T, u User) Network {
 	n := Network{
-		owner: u.ID,
-		name:  "test network",
+		Owner: u.ID,
+		Name:  "test network",
 	}
 
 	if err := n.Save(context.Background()); err != nil {
@@ -105,7 +105,7 @@ func TestUpdateUser(t *testing.T) {
 	openDb(t)
 
 	u := makeUser(t)
-	u.name = "cool person"
+	u.Name = "cool person"
 	if err := u.Save(context.Background()); err != nil {
 		t.Fatalf("failed to update user: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestNewNetwork(t *testing.T) {
 	u := makeUser(t)
 	nw := makeNetwork(t, u)
 
-	nnw, err := NetworkID(context.Background(), nw.id)
+	nnw, err := NetworkID(context.Background(), nw.ID)
 	if err != nil {
 		t.Fatalf("failed fetching network: %v", err)
 		return
@@ -188,13 +188,13 @@ func TestUpdateNetwork(t *testing.T) {
 
 	u := makeUser(t)
 	nw := makeNetwork(t, u)
-	nw.name = "network name"
+	nw.Name = "network name"
 
 	if err := nw.Save(context.Background()); err != nil {
 		t.Fatalf("failed saving network: %v", err)
 	}
 
-	nnw, err := NetworkID(context.Background(), nw.id)
+	nnw, err := NetworkID(context.Background(), nw.ID)
 	if err != nil {
 		t.Fatalf("failed fetching network: %v", err)
 		return
@@ -216,7 +216,7 @@ func TestDelNetwork(t *testing.T) {
 		return
 	}
 
-	_, err := NetworkID(context.Background(), nw.id)
+	_, err := NetworkID(context.Background(), nw.ID)
 	if !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("delete failed, network still exists: %v", err)
 		return
@@ -302,7 +302,7 @@ func TestAddDevice(t *testing.T) {
 		t.Fatalf("failed to add device to network: %v", err)
 	}
 
-	devs, err := NetworkDevices(context.Background(), nw.id)
+	devs, err := NetworkDevices(context.Background(), nw.ID)
 	if err != nil {
 		t.Fatalf("failed to list devices: %v", err)
 	}
@@ -331,7 +331,7 @@ func TestRemoveDevice(t *testing.T) {
 		t.Fatalf("failed to delete device from network: %v", err)
 	}
 
-	devs, err := NetworkDevices(context.Background(), nw.id)
+	devs, err := NetworkDevices(context.Background(), nw.ID)
 	if err != nil {
 		t.Fatalf("failed to list devices: %v", err)
 	}

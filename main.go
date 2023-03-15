@@ -10,9 +10,9 @@ import (
 	"runtime/debug"
 
 	"github.com/mca3/mwr"
+	"github.com/mca3/pikorv/config"
 	"github.com/mca3/pikorv/db"
 	"github.com/mca3/pikorv/routes"
-	"github.com/mca3/pikorv/config"
 )
 
 var (
@@ -43,13 +43,16 @@ func startHttp() {
 	// New routes
 	srvh.Post("/api/new/user", routes.NewUser)
 	srvh.Post("/api/new/device", routes.NewDevice)
+	srvh.Post("/api/new/network", routes.NewNetwork)
 
 	// User stuff
 	srvh.Get("/api/list/devices", routes.ListDevices)
+	srvh.Get("/api/list/networks", routes.ListNetworks)
 
 	// Delete routes
 	srvh.Post("/api/del/user", routes.DeleteUser)
 	srvh.Post("/api/del/device", routes.DeleteDevice)
+	srvh.Post("/api/del/network", routes.DeleteNetwork)
 
 	// Auth stuff
 	srvh.Get("/api/auth", routes.Auth)
