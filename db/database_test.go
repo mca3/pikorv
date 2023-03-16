@@ -229,10 +229,13 @@ func TestNewDevice(t *testing.T) {
 	u := makeUser(t)
 	dev := makeDevice(t, u)
 
+	if dev.ID == 0 {
+		t.Fatalf("device ID is zero")
+	}
+
 	ndev, err := DeviceID(context.Background(), dev.ID)
 	if err != nil {
 		t.Fatalf("failed fetching network: %v", err)
-		return
 	}
 
 	if !reflect.DeepEqual(dev, ndev) {
@@ -242,7 +245,6 @@ func TestNewDevice(t *testing.T) {
 	devs, err := Devices(context.Background(), u.ID)
 	if err != nil {
 		t.Fatalf("failed fetching devices: %v", err)
-		return
 	}
 
 	if len(devs) == 0 {

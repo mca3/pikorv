@@ -59,6 +59,7 @@ func startHttp() {
 	srvh.Post("/api/del/network", routes.DeleteNetwork)
 
 	// Device stuff
+	srvh.Get("/api/device/info", routes.DeviceInfo)
 	srvh.Post("/api/device/ping", routes.DevicePing)
 	srvh.Post("/api/device/join", routes.DeviceJoin)
 	srvh.Post("/api/device/leave", routes.DeviceLeave)

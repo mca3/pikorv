@@ -1,9 +1,8 @@
 package routes
 
-// This package holds all API routes.
-
 import (
 	"net/netip"
+	"strconv"
 
 	"github.com/mca3/mwr"
 	"github.com/mca3/pikorv/db"
@@ -115,6 +114,42 @@ func DeleteDevice(c *mwr.Ctx) error {
 	// TODO: Notify networks
 
 	return c.SendStatus(204)
+}
+
+// DeviceInfo fetches info for a specific device
+//
+// Path: /api/device/info
+// Query: id=<device id>
+// Method: GET
+// Authenticated.
+func DeviceInfo(c *mwr.Ctx) error {
+	user, ok := isAuthed(c)
+	if !ok {
+		return api403(c, errNoAuth)
+	}
+
+	sid := c.Query("id")
+	if sid == "" {
+		// Need to specify ID
+		return api400(c)
+	}
+
+	id, err := strconv.ParseInt(sid, 10, 64)
+	if err != nil || id <= 0 {
+		// Bad ID
+		return api400(c, err)
+	}
+
+	dev, err := db.DeviceID(c.Context(), id)
+	if err != nil {
+		return api500(c, err)
+	}
+
+	if dev.Owner != user.ID {
+		return api404(c)
+	}
+
+	return sendJSON(c, dev)
 }
 
 // DevicePing updates the device's IP.
