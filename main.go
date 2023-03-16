@@ -60,13 +60,15 @@ func startHttp() {
 
 	// Device stuff
 	srvh.Get("/api/device/info", routes.DeviceInfo)
-	srvh.Post("/api/device/ping", routes.DevicePing)
 	srvh.Post("/api/device/join", routes.DeviceJoin)
 	srvh.Post("/api/device/leave", routes.DeviceLeave)
 
 	// Auth stuff
 	srvh.Get("/api/auth", routes.Auth)
 	srvh.Post("/api/auth", routes.Auth)
+
+	// Misc
+	srvh.Get("/api/gateway", routes.Gateway)
 
 	log.Fatal(srv.ListenAndServe())
 }

@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"net/netip"
 	"strconv"
 
 	"github.com/mca3/mwr"
@@ -150,54 +149,6 @@ func DeviceInfo(c *mwr.Ctx) error {
 	}
 
 	return sendJSON(c, dev)
-}
-
-// DevicePing updates the device's IP.
-//
-// Path: /api/device/ping
-// Method: POST
-// Authenticated.
-// Body: JSON. Specify "device".
-func DevicePing(c *mwr.Ctx) error {
-	user, ok := isAuthed(c)
-	if !ok {
-		return api403(c, errNoAuth)
-	}
-
-	data := struct {
-		Device int64
-		Port   uint16
-	}{}
-
-	if err := c.BodyParser(&data); err != nil {
-		return api400(c, err)
-	} else if data.Device == 0 || data.Port == 0 {
-		return api400(c)
-	}
-
-	dev, err := db.DeviceID(c.Context(), data.Device)
-	if err != nil {
-		return api500(c, err)
-	}
-
-	if dev.Owner != user.ID {
-		return api404(c)
-	}
-
-	addr, err := netip.ParseAddr(c.IP())
-	if err != nil {
-		// what?
-		panic(err)
-	}
-
-	dev.Endpoint = netip.AddrPortFrom(addr, data.Port).String()
-	if err := dev.Save(c.Context()); err != nil {
-		return api500(c, err)
-	}
-
-	// TODO: Notify others on network
-
-	return c.SendStatus(204)
 }
 
 // DeviceJoin joins a device to a network.
