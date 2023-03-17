@@ -507,3 +507,100 @@ func (n *Device) Delete(ctx context.Context) error {
 	_, err := db.Exec(ctx, "DELETE FROM devices WHERE id = $1", n.ID)
 	return err
 }
+
+// ConnectedTo returns a list of devices that this device is connected to.
+func (n *Device) ConnectedTo(ctx context.Context) ([]Device, error) {
+	rows, err := db.Query(ctx, `
+		WITH nets AS (
+			SELECT
+				network
+			FROM nwdevs
+			WHERE device = $1
+		)
+		SELECT
+			devices.id,
+			devices.owner,
+			devices.name,
+			devices.pubkey,
+			devices.ip,
+			devices.endpoint
+		FROM devices
+		INNER JOIN nwdevs ON
+			nwdevs.device = devices.id
+			AND nwdevs.device != $1
+			AND network IN (SELECT network FROM nets)
+		GROUP BY devices.id
+	`, n.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var devs []Device
+
+	for rows.Next() {
+		dev := Device{}
+		var ens sql.NullString
+
+		if err := rows.Scan(&dev.ID, &dev.Owner, &dev.Name, &dev.PublicKey, &dev.IP, &ens); err != nil {
+			return devs, err
+		}
+
+		dev.Endpoint = ens.String
+		devs = append(devs, dev)
+	}
+
+	return devs, nil
+}
+
+// AffecedByLeave returns a list of devices that should know about this device
+// leaving a network.
+func (n *Device) AffectedByLeave(ctx context.Context, nw int64) ([]Device, error) {
+	rows, err := db.Query(ctx, `
+		WITH nets AS (
+			SELECT
+				network
+			FROM nwdevs
+			WHERE device = $1
+		)
+		SELECT
+			devices.id,
+			devices.owner,
+			devices.name,
+			devices.pubkey,
+			devices.ip,
+			devices.endpoint
+		FROM devices
+		INNER JOIN nwdevs ON
+			nwdevs.device = devices.id
+			AND nwdevs.device != $1
+			AND network IN (SELECT network FROM nets)
+		GROUP BY devices.id
+		HAVING SUM(
+			CASE
+				WHEN nwdevs.network = $2 THEN 0
+				ELSE 1
+			END
+		) < 1
+	`, n.ID, nw)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var devs []Device
+
+	for rows.Next() {
+		dev := Device{}
+		var ens sql.NullString
+
+		if err := rows.Scan(&dev.ID, &dev.Owner, &dev.Name, &dev.PublicKey, &dev.IP, &ens); err != nil {
+			return devs, err
+		}
+
+		dev.Endpoint = ens.String
+		devs = append(devs, dev)
+	}
+
+	return devs, nil
+}

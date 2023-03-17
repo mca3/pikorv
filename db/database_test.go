@@ -3,12 +3,16 @@ package db
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"reflect"
 	"testing"
 
 	"github.com/jackc/pgx/v4"
 )
+
+var devCount = 1
+var nwCount = 1
 
 func openDb(t *testing.T) {
 	u := os.Getenv("POSTGRES_TEST")
@@ -40,8 +44,9 @@ func makeUser(t *testing.T) User {
 func makeNetwork(t *testing.T, u User) Network {
 	n := Network{
 		Owner: u.ID,
-		Name:  "test network",
+		Name:  fmt.Sprintf("test network %d", nwCount),
 	}
+	nwCount++
 
 	if err := n.Save(context.Background()); err != nil {
 		t.Fatalf("failed saving user: %v", err)
@@ -53,16 +58,28 @@ func makeNetwork(t *testing.T, u User) Network {
 func makeDevice(t *testing.T, u User) Device {
 	n := Device{
 		Owner:     u.ID,
-		Name:      "my test device",
-		PublicKey: "dummy value goes here",
-		IP:        "2001:db8::1",
+		Name:      fmt.Sprintf("my test device %d", devCount),
+		PublicKey: fmt.Sprintf("dummy value goes here %d", devCount),
+		IP:        fmt.Sprintf("2001:db8::%d", devCount),
 	}
+	devCount++
 
 	if err := n.Save(context.Background()); err != nil {
 		t.Fatalf("failed saving user: %v", err)
 	}
 
 	return n
+}
+
+func mustJoinNetwork(t *testing.T, dev, nwid int64) {
+	nw, err := NetworkID(context.Background(), nwid)
+	if err != nil {
+		t.Fatalf("failed to fetch network: %v", err)
+	}
+
+	if err := nw.Add(context.Background(), dev); err != nil {
+		t.Fatalf("failed to add to network: %v", err)
+	}
 }
 
 func TestNewUser(t *testing.T) {
@@ -340,5 +357,145 @@ func TestRemoveDevice(t *testing.T) {
 
 	if len(devs) != 0 {
 		t.Fatalf("returned %d devices, should have zero", len(devs))
+	}
+}
+
+func TestDeviceNetworks(t *testing.T) {
+	openDb(t)
+
+	u := makeUser(t)
+	nw := makeNetwork(t, u)
+	nw2 := makeNetwork(t, u)
+	nw3 := makeNetwork(t, u)
+	dev := makeDevice(t, u)
+	dev2 := makeDevice(t, u)
+
+	mustJoinNetwork(t, dev.ID, nw.ID)
+	mustJoinNetwork(t, dev.ID, nw2.ID)
+	mustJoinNetwork(t, dev2.ID, nw2.ID)
+	mustJoinNetwork(t, dev2.ID, nw3.ID)
+
+	// device 1
+	nws, err := DeviceNetworks(context.Background(), dev.ID)
+	if err != nil {
+		t.Fatalf("failed to fetch device 2 networks: %v", err)
+	}
+
+	if len(nws) != 2 {
+		t.Fatalf("device 1 is in %d networks, expected 2", len(nws))
+	}
+
+	if !reflect.DeepEqual(nws[0], nw) {
+		t.Fatalf("device 1 nws[0] = %v, expected %v", nws[0], nw)
+	}
+	if !reflect.DeepEqual(nws[1], nw2) {
+		t.Fatalf("device 1 nws[1] = %v, expected %v", nws[1], nw2)
+	}
+
+	// device 2
+	nws, err = DeviceNetworks(context.Background(), dev2.ID)
+	if err != nil {
+		t.Fatalf("failed to fetch device 2 networks: %v", err)
+	}
+
+	if len(nws) != 2 {
+		t.Fatalf("device 2 is in %d networks, expected 2", len(nws))
+	}
+
+	if !reflect.DeepEqual(nws[0], nw2) {
+		t.Fatalf("device 2 nws[0] = %v, expected %v", nws[0], nw2)
+	}
+	if !reflect.DeepEqual(nws[1], nw3) {
+		t.Fatalf("device 2 nws[1] = %v, expected %v", nws[1], nw3)
+	}
+}
+
+func TestConnectedTo(t *testing.T) {
+	openDb(t)
+
+	u := makeUser(t)
+	nw := makeNetwork(t, u)
+	nw2 := makeNetwork(t, u)
+	dev := makeDevice(t, u)
+	dev2 := makeDevice(t, u)
+	dev3 := makeDevice(t, u)
+
+	mustJoinNetwork(t, dev.ID, nw.ID)
+	mustJoinNetwork(t, dev2.ID, nw.ID)
+	mustJoinNetwork(t, dev3.ID, nw.ID)
+	mustJoinNetwork(t, dev2.ID, nw2.ID)
+	mustJoinNetwork(t, dev3.ID, nw2.ID)
+
+	devs, err := dev.ConnectedTo(context.Background())
+	if err != nil {
+		t.Fatalf("failed to fetch device connections: %v", err)
+	}
+
+	if len(devs) != 2 {
+		t.Fatalf("device 1 knows %d devices, expected 2", len(devs))
+	}
+
+	// I don't know why the order is swapped, it just is
+	if !reflect.DeepEqual(devs[0], dev3) {
+		t.Fatalf("device 1 devs[0] = %v, expected %v", devs[0], dev3)
+	}
+	if !reflect.DeepEqual(devs[1], dev2) {
+		t.Fatalf("device 1 devs[1] = %v, expected %v", devs[1], dev2)
+	}
+}
+
+func TestAffectedByLeave(t *testing.T) {
+	openDb(t)
+
+	u := makeUser(t)
+	nw := makeNetwork(t, u)
+	nw2 := makeNetwork(t, u)
+	nw3 := makeNetwork(t, u)
+	dev := makeDevice(t, u)
+	dev2 := makeDevice(t, u)
+	dev3 := makeDevice(t, u)
+	dev4 := makeDevice(t, u)
+
+	mustJoinNetwork(t, dev.ID, nw.ID)
+	mustJoinNetwork(t, dev.ID, nw2.ID)
+
+	mustJoinNetwork(t, dev2.ID, nw.ID)
+	mustJoinNetwork(t, dev2.ID, nw2.ID)
+
+	mustJoinNetwork(t, dev3.ID, nw.ID)
+	mustJoinNetwork(t, dev3.ID, nw3.ID)
+
+	mustJoinNetwork(t, dev4.ID, nw3.ID)
+
+	// device 1: nw1, nw2, ---
+	// device 2: nw1, nw2, ---
+	// device 3: nw1, ---, nw3
+	// device 4: ---, ---, nw3
+	//
+	// when device 1 leaves nw1, device 2 will be unaffected because it is
+	// connected to dev1 by nw2.
+	// dev3 should be disconnected. dev4 is ignored.
+	//
+	// after:
+	// device 1: ---, nw2, ---
+	// device 2: nw1, nw2, ---
+	// device 3: nw1, ---, nw3
+	// device 4: ---, ---, nw3
+
+	devs, err := dev.AffectedByLeave(context.Background(), nw.ID)
+	if err != nil {
+		t.Fatalf("failed to fetch device connections: %v", err)
+	}
+
+	if len(devs) != 1 {
+		for _, v := range devs {
+			t.Errorf("%v", v)
+		}
+		t.Fatalf("device 1 affects %d devices, expected 1", len(devs))
+	}
+
+	// I don't know why the order is swapped, it just is
+	if !reflect.DeepEqual(devs[0], dev3) {
+		t.Fatalf("device 1 devs[0] = %v, expected %v", devs[0], dev3)
 	}
 }
