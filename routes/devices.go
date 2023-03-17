@@ -5,6 +5,7 @@ import (
 
 	"github.com/mca3/mwr"
 	"github.com/mca3/pikorv/db"
+	"github.com/mca3/pikorv/routes/gateway"
 )
 
 // NewDevice creates a new device and attaches it to the user's account.
@@ -195,7 +196,7 @@ func DeviceJoin(c *mwr.Ctx) error {
 		return api500(c, err)
 	}
 
-	notifyDeviceJoin(dev, nw.ID)
+	go gateway.OnNetworkJoin(dev, nw)
 
 	return c.SendStatus(204)
 }
@@ -240,11 +241,11 @@ func DeviceLeave(c *mwr.Ctx) error {
 		return api404(c)
 	}
 
-	notifyDeviceDelete(dev, nw.ID)
-
 	if err := nw.Remove(c.Context(), dev.ID); err != nil {
 		return api500(c, err)
 	}
+
+	go gateway.OnNetworkLeave(dev, nw)
 
 	return c.SendStatus(204)
 }
