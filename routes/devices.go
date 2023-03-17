@@ -195,7 +195,7 @@ func DeviceJoin(c *mwr.Ctx) error {
 		return api500(c, err)
 	}
 
-	// TODO: Notify others on network
+	notifyDeviceJoin(dev, nw.ID)
 
 	return c.SendStatus(204)
 }
@@ -240,11 +240,11 @@ func DeviceLeave(c *mwr.Ctx) error {
 		return api404(c)
 	}
 
+	notifyDeviceDelete(dev, nw.ID)
+
 	if err := nw.Remove(c.Context(), dev.ID); err != nil {
 		return api500(c, err)
 	}
-
-	// TODO: Notify others on network
 
 	return c.SendStatus(204)
 }
