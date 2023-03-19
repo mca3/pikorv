@@ -7,11 +7,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
+	"log"
 	"strings"
+	"time"
 
 	"github.com/mca3/mwr"
+	"github.com/mca3/pikorv/config"
 	"github.com/mca3/pikorv/db"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 var (
@@ -40,9 +44,22 @@ var (
 
 // tryAuth decodes a token and attempts to authenticate as a user using it.
 func tryAuth(token string) (*db.User, bool) {
-	// TODO: This is *very* temporary!
-	i, _ := strconv.Atoi(token)
-	u, err := db.UserID(context.Background(), int64(i))
+	jtok, err := jwt.Parse(token, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+
+		return []byte(config.JWTSecret), nil
+	})
+	if err != nil {
+		log.Println(err)
+		return nil, false
+	} else if !jtok.Valid {
+		return nil, false
+	}
+
+	d := jtok.Claims.(jwt.MapClaims)["id"].(float64)
+	u, err := db.UserID(context.Background(), int64(d))
 	return &u, err == nil
 }
 
@@ -101,9 +118,22 @@ func Auth(c *mwr.Ctx) error {
 		return api400(c)
 	}
 
-	if uid := db.CheckPassword(c.Context(), data.Username, data.Password); uid != -1 {
-		return c.SendString(fmt.Sprint(uid))
+	uid := db.CheckPassword(c.Context(), data.Username, data.Password)
+	if uid == -1 {
+		return api403(c) // TODO: Something proper
 	}
 
-	return api403(c) // TODO: Something proper
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"id":  uid,
+		"exp": time.Now().Add(time.Hour * 24 * 7).Unix(),
+	})
+
+	etoken, err := token.SignedString([]byte(config.JWTSecret))
+	if err != nil {
+		return api500(c, err)
+	}
+
+	return sendJSON(c, struct {
+		Token string `json:"token"`
+	}{etoken})
 }

@@ -41,7 +41,9 @@ func startHttp() {
 
 		err := c.Next()
 		if err != nil {
-			log.Printf("%s ERROR %v", c.Path(), err)
+			log.Printf("%s %s ERROR %v", c.IP(), c.Path(), err)
+		} else {
+			log.Printf("%s %s", c.IP(), c.Path())
 		}
 		return err
 	})

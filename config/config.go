@@ -12,6 +12,7 @@ var (
 	HttpAddr    = ":8080"
 	Subnet      = "fd00::/32"
 	SubnetIp    *net.IPNet
+	JWTSecret   = ""
 )
 
 func Load() error {
@@ -19,6 +20,7 @@ func Load() error {
 		Dburl  string `json:"database"`
 		Http   string `json:"http"`
 		Subnet string `json:"subnet"`
+		Jwt    string `json:"jwt_secret"`
 	}{}
 
 	f, err := os.Open(ConfPath)
@@ -40,6 +42,10 @@ func Load() error {
 	if cfg.Subnet != "" {
 		Subnet = cfg.Subnet
 	}
+	if cfg.Jwt == "" {
+		panic("jwt secret is empty")
+	}
+	JWTSecret = cfg.Jwt
 
 	_, SubnetIp, err = net.ParseCIDR(Subnet)
 	return err
