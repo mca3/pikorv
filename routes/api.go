@@ -137,3 +137,26 @@ func Auth(c *mwr.Ctx) error {
 		Token string `json:"token"`
 	}{etoken})
 }
+
+// Punch returns a Pikopunch server for the client to connect to over
+// WireGuard.
+//
+// Path: /api/punch
+// Method: GET
+// Authenticated.
+func Punch(c *mwr.Ctx) error {
+	_, ok := isAuthed(c)
+	if !ok {
+		return api403(c, errNoAuth)
+	}
+
+	return sendJSON(c, struct {
+		Endpoint  string `json:"endpoint"`
+		PublicKey string `json:"public_key"`
+		IP        string `json:"ip"`
+	}{
+		fmt.Sprintf("%s:%d", config.OurIP, config.PunchPort),
+		config.PunchPublicKey,
+		config.PunchIP,
+	})
+}

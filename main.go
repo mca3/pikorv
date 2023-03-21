@@ -9,10 +9,12 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/debug"
+	"time"
 
 	"github.com/mca3/mwr"
 	"github.com/mca3/pikorv/config"
 	"github.com/mca3/pikorv/db"
+	"github.com/mca3/pikorv/internal/ppwg"
 	"github.com/mca3/pikorv/routes"
 	"github.com/mca3/pikorv/routes/gateway"
 )
@@ -76,6 +78,7 @@ func startHttp() {
 
 	// Misc
 	srvh.Get("/api/gateway", routes.Gateway)
+	srvh.Get("/api/punch", routes.Punch)
 
 	log.Fatal(srv.ListenAndServe())
 }
@@ -86,6 +89,9 @@ func stopHttp() {
 
 func main() {
 	flag.Parse()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	config.ConfPath = *cfgPath
 
@@ -99,17 +105,38 @@ func main() {
 
 	defer db.Disconnect()
 
+	go func() {
+		if err := ppwg.Listen(ctx); err != nil {
+			log.Fatalf("pikopunch failed to listen: %v", err)
+			cancel()
+		}
+	}()
+
 	// The gateway has a couple of workers that send out WebSocket
 	// messages, to prevent spawning many goroutines.
 	gateway.InitWorkers(runtime.GOMAXPROCS(0), 1<<12) // 4096
 
-	startHttp()
+	go startHttp()
 	defer stopHttp()
+
+	log.Println("Running.")
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
-	<-c
+
+	select {
+	case <-ctx.Done():
+	case <-c:
+	}
+
+	log.Println("Exiting.")
+
+	cancel()
 
 	// Let all gateway workers finish up what they need to do.
 	gateway.JoinWorkers()
+
+	// TODO: This is really terrible!
+	// We're waiting for WireGuard to finish up.
+	time.Sleep(time.Second)
 }

@@ -22,9 +22,9 @@ type gatewayMsg struct {
 	Network *db.Network `json:"network,omitempty"`
 	Remove  bool
 
-	Port      int   `json:"port,omitempty"`
-	DeviceID  int64 `json:"device_id,omitempty"`
-	NetworkID int64 `json:"network_id,omitempty"`
+	Endpoint  string `json:"endpoint,omitempty"`
+	DeviceID  int64  `json:"device_id,omitempty"`
+	NetworkID int64  `json:"network_id,omitempty"`
 }
 
 type gatewayClient struct {
@@ -112,7 +112,7 @@ func (gc *gatewayClient) handle(ctx context.Context, msg *gatewayMsg) {
 
 	switch msg.Type {
 	case gatewayPing:
-		if msg.DeviceID <= 0 || msg.Port < 1024 || msg.Port > 65535 {
+		if msg.DeviceID <= 0 || msg.Endpoint == "" {
 			return
 		}
 
@@ -125,7 +125,12 @@ func (gc *gatewayClient) handle(ctx context.Context, msg *gatewayMsg) {
 			gc.d = dev.ID
 		}
 
-		dev.Endpoint = netip.AddrPortFrom(gc.ip, uint16(msg.Port)).String()
+		// TODO: Sanity checking
+		if dev.Endpoint == msg.Endpoint {
+			return
+		}
+
+		dev.Endpoint = msg.Endpoint
 		if err := dev.Save(ctx); err != nil {
 			return
 		}

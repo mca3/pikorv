@@ -422,6 +422,38 @@ func (n *Network) Delete(ctx context.Context) error {
 	return err
 }
 
+// AllDevices returns all devices.
+func AllDevices(ctx context.Context) ([]Device, error) {
+	var ns []Device
+
+	rows, err := db.Query(ctx, `
+		SELECT
+			id,
+			owner,
+			name,
+			pubkey,
+			ip,
+			endpoint
+		FROM devices
+	`)
+	if err != nil {
+		return ns, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		n := Device{}
+		var ens sql.NullString
+		if err := rows.Scan(&n.ID, &n.Owner, &n.Name, &n.PublicKey, &n.IP, &ens); err != nil {
+			return ns, err
+		}
+		n.Endpoint = ens.String
+		ns = append(ns, n)
+	}
+
+	return ns, err
+}
+
 // Devices returns all devices for a user.
 func Devices(ctx context.Context, user int64) ([]Device, error) {
 	var ns []Device
